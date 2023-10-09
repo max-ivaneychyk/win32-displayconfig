@@ -30,7 +30,7 @@ struct Win32DeviceNameInfo {
 
 struct Win32QueryDisplayConfigResults {
     Win32QueryDisplayConfigResults(UINT32 cPathInfo, UINT32 cModeInfo)
-        : error(ERROR_SUCCESS) {
+            : error(ERROR_SUCCESS) {
         this->rgPathInfo = std::vector<DISPLAYCONFIG_PATH_INFO>(cPathInfo);
         this->rgModeInfo = std::vector<DISPLAYCONFIG_MODE_INFO>(cModeInfo);
         this->rgNameInfo = std::vector<struct Win32DeviceNameInfo>();
@@ -40,6 +40,7 @@ struct Win32QueryDisplayConfigResults {
     std::vector<DISPLAYCONFIG_MODE_INFO> rgModeInfo;
     std::vector<struct Win32DeviceNameInfo> rgNameInfo;
     LONG error;
+    DISPLAYCONFIG_TOPOLOGY_ID topologyId;
     BOOL faultWasBuffer;
 };
 
@@ -67,16 +68,16 @@ struct Win32RestoreDisplayConfigDevice {
 DWORD RunDisplayChangeContextLoop(LPVOID lpParam);
 
 class Win32DisplayChangeContext {
-   public:
+public:
     Win32DisplayChangeContext(Napi::Env env, Napi::Function &callback) : running(), dwThreadId(0) {
         this->running.store(TRUE);
         this->hThread = NULL;
         this->tsfn = Napi::ThreadSafeFunction::New(
-            env,
-            callback,
-            "Win32DisplayChangeContext thread",
-            512,
-            1);
+                env,
+                callback,
+                "Win32DisplayChangeContext thread",
+                512,
+                1);
     }
 
     DWORD Start() {
@@ -129,15 +130,15 @@ DWORD RunDisplayChangeContextLoop(LPVOID lpParam) {
     // In order to get WM_DISPLAYCHANGE messages we have to create
     // a hidden window in this specific thread.
     HWND hWnd = CreateWindowExW(
-        WS_EX_TRANSPARENT,
-        L"STATIC",
-        L"win32-displayconfig Broadcast Event Monitor",
-        WS_OVERLAPPEDWINDOW,
-        0, 0, 0, 0,
-        NULL,
-        NULL,
-        GetModuleHandle(NULL),
-        NULL);
+            WS_EX_TRANSPARENT,
+            L"STATIC",
+            L"win32-displayconfig Broadcast Event Monitor",
+            WS_OVERLAPPEDWINDOW,
+            0, 0, 0, 0,
+            NULL,
+            NULL,
+            GetModuleHandle(NULL),
+            NULL);
 
     // The documentation would lead you to believe you get a WM_DISPLAYCHANGE
     // whenever the display changes. The documentation would be wrong.
@@ -210,7 +211,7 @@ bool AlreadyHasNameInfo(const std::vector<struct Win32DeviceNameInfo> &rgNameInf
     return false;
 }
 
-void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults) {
+void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults>) {
     DISPLAYCONFIG_TARGET_DEVICE_NAME request;
     request.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
     request.header.size = sizeof(request);
@@ -252,6 +253,8 @@ void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> c
 
 std::shared_ptr<struct Win32QueryDisplayConfigResults> DoQueryDisplayConfig() {
     UINT32 cPathInfo = 0, cModeInfo = 0, cPathInfoMax = 0, cModeInfoMax = 0;
+    DISPLAYCONFIG_TOPOLOGY_ID currentTopology;
+
     while (true) {
         LONG errorCode = GetDisplayConfigBufferSizes(QDC_ALL_PATHS, &cPathInfo, &cModeInfo);
         if (errorCode != ERROR_SUCCESS) {
@@ -275,11 +278,12 @@ std::shared_ptr<struct Win32QueryDisplayConfigResults> DoQueryDisplayConfig() {
             return result;
         }
 
-        errorCode = QueryDisplayConfig(QDC_ALL_PATHS, &cPathInfo, result->rgPathInfo.data(), &cModeInfo, result->rgModeInfo.data(), NULL);
+        errorCode = QueryDisplayConfig(QDC_ALL_PATHS, &cPathInfo, result->rgPathInfo.data(), &cModeInfo, result->rgModeInfo.data(), &currentTopology);
         result->error = errorCode;
         if (errorCode == ERROR_SUCCESS) {
             result->rgPathInfo.resize(cPathInfo);
             result->rgModeInfo.resize(cModeInfo);
+            result->topologyId = currentTopology;
             AcquireDeviceNames(result);
             return result;
         } else if (errorCode != ERROR_INSUFFICIENT_BUFFER) {
@@ -353,11 +357,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     // Windows, the only way out of this hole is to turn them all on, then turn off
     // the ones we don't want.
     auto error = SetDisplayConfig(
-        preserve.size(),
-        preserve.data(),
-        0,
-        NULL,
-        SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_TOPOLOGY_CLONE | SDC_TOPOLOGY_EXTEND | SDC_ALLOW_PATH_ORDER_CHANGES);
+            preserve.size(),
+            preserve.data(),
+            0,
+            NULL,
+            SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_TOPOLOGY_CLONE | SDC_TOPOLOGY_EXTEND | SDC_ALLOW_PATH_ORDER_CHANGES);
 
     if (error != ERROR_SUCCESS) {
         return error;
@@ -393,11 +397,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     }
 
     error = SetDisplayConfig(
-        preserve.size(),
-        preserve.data(),
-        0,
-        NULL,
-        SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES);
+            preserve.size(),
+            preserve.data(),
+            0,
+            NULL,
+            SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES);
 
     if (!args->persistent || error != ERROR_SUCCESS) {
         return error;
@@ -412,11 +416,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     }
 
     return SetDisplayConfig(
-        persistentQueryResults->rgPathInfo.size(),
-        persistentQueryResults->rgPathInfo.data(),
-        persistentQueryResults->rgModeInfo.size(),
-        persistentQueryResults->rgModeInfo.data(),
-        SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE);
+            persistentQueryResults->rgPathInfo.size(),
+            persistentQueryResults->rgPathInfo.data(),
+            persistentQueryResults->rgModeInfo.size(),
+            persistentQueryResults->rgModeInfo.data(),
+            SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE);
 }
 
 LONG RestoreDeviceConfig(const std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> restoreConfig, BOOL persistent) {
@@ -454,11 +458,11 @@ LONG RestoreDeviceConfig(const std::shared_ptr<std::vector<struct Win32RestoreDi
     auto persistFlag = persistent ? SDC_SAVE_TO_DATABASE : 0;
 
     return SetDisplayConfig(
-        rgPathInfo.size(),
-        rgPathInfo.data(),
-        rgModeInfo.size(),
-        rgModeInfo.data(),
-        SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | persistFlag);
+            rgPathInfo.size(),
+            rgPathInfo.data(),
+            rgModeInfo.size(),
+            rgModeInfo.data(),
+            SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | persistFlag);
 }
 
 Napi::Object ConvertLUID(Napi::Env env, const LUID *luid) {
@@ -779,11 +783,12 @@ Napi::Object ConvertConfigResults(Napi::Env env, const std::shared_ptr<struct Wi
     result.Set("pathArray", ConvertPathsInfo(env, configResults->rgPathInfo));
     result.Set("modeArray", ConvertModesInfo(env, configResults->rgModeInfo));
     result.Set("nameArray", ConvertNamesInfo(env, configResults->rgNameInfo));
+    result.Set("topologyId", configResults->topologyId);
     return result;
 }
 
 class Win32QueryDisplayConfigWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32QueryDisplayConfigWorker(Napi::Function &callback) : Napi::AsyncWorker(callback), configResults() {}
 
     void Execute() {
@@ -801,7 +806,7 @@ class Win32QueryDisplayConfigWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults;
 };
 
@@ -820,9 +825,9 @@ Napi::Value Win32QueryDisplayConfig(const Napi::CallbackInfo &info) {
 }
 
 class Win32ToggleEnabledWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32ToggleEnabledWorker(Napi::Function &callback, std::shared_ptr<struct Win32DeviceConfigToggleEnabled> args)
-        : Napi::AsyncWorker(callback), args(args) {}
+            : Napi::AsyncWorker(callback), args(args) {}
 
     void Execute() {
         this->errorCode = ToggleEnabled(this->args);
@@ -833,7 +838,7 @@ class Win32ToggleEnabledWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<struct Win32DeviceConfigToggleEnabled> args;
     LONG errorCode;
 };
@@ -909,9 +914,9 @@ Napi::Value Win32ToggleEnabledDisplays(const Napi::CallbackInfo &info) {
 }
 
 class Win32RestoreDisplayConfigWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32RestoreDisplayConfigWorker(Napi::Function &callback, std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> configs, BOOL persistent)
-        : Napi::AsyncWorker(callback), configs(configs), persistent(persistent) {}
+            : Napi::AsyncWorker(callback), configs(configs), persistent(persistent) {}
 
     void Execute() {
         this->errorCode = RestoreDeviceConfig(this->configs, this->persistent);
@@ -922,7 +927,7 @@ class Win32RestoreDisplayConfigWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> configs;
     LONG errorCode;
     BOOL persistent;
