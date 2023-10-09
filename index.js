@@ -191,6 +191,7 @@ module.exports.queryDisplayConfig = () => {
   return new Promise((resolve, reject) => {
     const ran = addon.win32_queryDisplayConfig((err, result) => {
       if (err !== null) {
+        console.log(err);
         reject(new Win32Error(err));
       } else {
         resolve(result);
@@ -299,13 +300,14 @@ module.exports.extractDisplayConfig = async () => {
       continue;
     }
 
-    const { monitorFriendlyDeviceName, monitorDevicePath } = displayNameEntry;
+    const { monitorFriendlyDeviceName, monitorDevicePath, topologyId } = displayNameEntry;
     const output = {
       displayName: monitorFriendlyDeviceName,
       devicePath: monitorDevicePath,
       sourceConfigId,
       targetConfigId,
       inUse,
+      topologyId,
       outputTechnology,
       rotation,
       scaling,
