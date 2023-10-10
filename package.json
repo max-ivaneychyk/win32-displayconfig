@@ -1,6 +1,6 @@
 {
   "name": "win32-displayconfig",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Inspect and reconfigure displays in Windows",
   "main": "index.js",
   "scripts": {
