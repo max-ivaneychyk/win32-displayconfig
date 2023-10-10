@@ -210,8 +210,33 @@ bool AlreadyHasNameInfo(const std::vector<struct Win32DeviceNameInfo> &rgNameInf
     }
     return false;
 }
-//void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults) {
 
+double getScale () {
+    auto activeWindow = GetActiveWindow();
+    HMONITOR monitor = MonitorFromWindow(activeWindow, MONITOR_DEFAULTTONEAREST);
+
+    // Get the logical width and height of the monitor
+    MONITORINFOEX monitorInfoEx;
+    monitorInfoEx.cbSize = sizeof(monitorInfoEx);
+    GetMonitorInfo(monitor, &monitorInfoEx);
+    auto cxLogical = monitorInfoEx.rcMonitor.right - monitorInfoEx.rcMonitor.left;
+    auto cyLogical = monitorInfoEx.rcMonitor.bottom - monitorInfoEx.rcMonitor.top;
+
+    // Get the physical width and height of the monitor
+    DEVMODE devMode;
+    devMode.dmSize = sizeof(devMode);
+    devMode.dmDriverExtra = 0;
+    EnumDisplaySettings(monitorInfoEx.szDevice, ENUM_CURRENT_SETTINGS, &devMode);
+    auto cxPhysical = devMode.dmPelsWidth;
+    auto cyPhysical = devMode.dmPelsHeight;
+
+    // Calculate the scaling factor
+    auto horizontalScale = ((double) cxPhysical / (double) cxLogical);
+    auto verticalScale = ((double) cyPhysical / (double) cyLogical);
+
+    return horizontalScale;
+}
+//void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults) {
 void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults, DISPLAYCONFIG_TOPOLOGY_ID topologyId) {
     DISPLAYCONFIG_TARGET_DEVICE_NAME request;
     request.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
@@ -741,6 +766,8 @@ Napi::Object ConvertNameInfo(Napi::Env env, const struct Win32DeviceNameInfo &na
     result.Set("edidProductCodeId", (double)nameInfo.edidProductCodeId);
     result.Set("connectorInstance", (double)nameInfo.connectorInstance);
  result.Set("topologyId", (double)nameInfo.topologyId);
+ result.Set("scale", (double)getScale());
+
     result.Set("monitorFriendlyDeviceName", Napi::String::New(env, (const char16_t *)nameInfo.monitorFriendlyDeviceName, wcsnlen_s(nameInfo.monitorFriendlyDeviceName, DEVICE_NAME_SIZE)));
     result.Set("monitorDevicePath", Napi::String::New(env, (const char16_t *)nameInfo.monitorDevicePath, wcsnlen_s(nameInfo.monitorDevicePath, DEVICE_PATH_SIZE)));
     return result;
