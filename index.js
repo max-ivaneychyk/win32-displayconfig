@@ -300,7 +300,7 @@ module.exports.extractDisplayConfig = async () => {
       continue;
     }
 
-    const { monitorFriendlyDeviceName, monitorDevicePath, topologyId } = displayNameEntry;
+    const { monitorFriendlyDeviceName, monitorDevicePath, topologyId, scale } = displayNameEntry;
     const output = {
       displayName: monitorFriendlyDeviceName,
       devicePath: monitorDevicePath,
@@ -308,6 +308,7 @@ module.exports.extractDisplayConfig = async () => {
       targetConfigId,
       inUse,
       topologyId,
+      scale,
       outputTechnology,
       rotation,
       scaling,
