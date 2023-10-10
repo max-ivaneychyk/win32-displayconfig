@@ -145,7 +145,7 @@ export interface ExtractedDisplayConfig {
   targetModeBuffer?: Buffer;
 }
 
-export function extractDisplayConfig(): Promise<ExtractedDisplayConfig>;
+export function extractDisplayConfig(): Promise<ExtractedDisplayConfig[]>;
 
 export interface ToggleEnabledDisplayArgs {
   enablePaths: string[];
