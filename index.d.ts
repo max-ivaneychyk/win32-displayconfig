@@ -138,6 +138,8 @@ export interface ExtractedDisplayConfig {
   outputTechnology: string;
   rotation: number;
   scaling: string;
+    scale: number;
+  topologyId: number;
   sourceMode: SourceMode;
   targetVideoSignalInfo?: TargetVideoSignalInfo;
   pathBuffer: Buffer;
