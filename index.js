@@ -244,6 +244,7 @@ module.exports.extractDisplayConfig = async () => {
   const config = await module.exports.queryDisplayConfig();
 
   const parseOrderNum = (str) => {
+    console.log("parse int ", parseInt(str.split("\\").at(-1), 10))
     return parseInt(str.split("\\").at(-1), 10)
   }
 
@@ -342,9 +343,10 @@ module.exports.extractDisplayConfig = async () => {
   //   return parseOrderNum(a.deviceID) - parseOrderNum(b.deviceID)
   // });
 
-  console.log(ret);
+  //console.log(ret);
   const parseOrder = (devicePath) => {
-    return Number(devicePath.match(/UID\d{1,10}/).replace("UID", ""))
+    console.log("devicePath",  Number(devicePath.match(/UID\d{1,10}/)[0].replace("UID", "")));
+    return Number(devicePath.match(/UID\d{1,10}/)[0].replace("UID", ""))
   }
 
   ret.sort((a, b) => {
@@ -357,13 +359,17 @@ module.exports.extractDisplayConfig = async () => {
   const mapOfSourceConfig = {};
 
   ret.forEach((display) => {
-    const key = display.sourceConfigId;
+    console.log("CONF", display.sourceConfigId);
+    const key = display.sourceConfigId.id;
     const count = mapOfSourceConfig[key] || 0;
     mapOfSourceConfig[key] = count+1;
   });
 
+  console.log(mapOfSourceConfig);
+
   return ret.map((display, order) => {
 
+    console.log(display.topologyId, DISPLAYCONFIG_TOPOLOGY_CLONE)
     if (display.topologyId !== DISPLAYCONFIG_TOPOLOGY_CLONE) {
       return {
         order: order+1,
@@ -392,7 +398,7 @@ module.exports.extractDisplayConfig = async () => {
     return {
       order: order+1,
       ...display,
-      topologyId: mapOfSourceConfig[display.sourceConfigId] > 1 ? DISPLAYCONFIG_TOPOLOGY_CLONE : DISPLAYCONFIG_TOPOLOGY_EXTEND,
+      topologyId: mapOfSourceConfig[display.sourceConfigId.id] > 1 ? DISPLAYCONFIG_TOPOLOGY_CLONE : DISPLAYCONFIG_TOPOLOGY_EXTEND,
       ...(config.metaArray[order] || {})
     }
   });
