@@ -11,6 +11,143 @@
 #include <memory>
 #include <vector>
 
+#include <iostream>
+#include <list>
+
+
+/////////////////////////// SCALE ////////////////////////////////////////
+
+
+struct MonitorData {
+    std::string targetDisplayName;
+    MONITORINFOEX monitorInfo;
+};
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    MonitorData* monitorData = reinterpret_cast<MonitorData*>(dwData);
+    MONITORINFOEX monitorInfo;
+    monitorInfo.cbSize = sizeof(MONITORINFOEX);
+    if (GetMonitorInfo(hMonitor, &monitorInfo)) {
+        if (monitorInfo.szDevice == monitorData->targetDisplayName) {
+            monitorData->monitorInfo = monitorInfo;
+        }
+    }
+    return TRUE;
+}
+double getScaleOfScreen( std::string targetDisplayName, int w, int h) {
+    MonitorData monitorData;
+    monitorData.targetDisplayName = targetDisplayName;
+
+    EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(&monitorData));
+
+    double wLocal =  monitorData.monitorInfo.rcMonitor.right -  monitorData.monitorInfo.rcMonitor.left;
+    //   auto hLocal =  monitorData.monitorInfo.rcMonitor.top -  monitorData.monitorInfo.rcMonitor.bottom;
+
+    return (w / wLocal) * 100;
+}
+///////////////////////////// END SCALE //////////////////////////////////////
+
+///////////////////////////// Frequency & Flags //////////////////////////////////////
+
+struct MonitorInfo {
+    bool isPrimaryDevice{};
+    bool isAttachedToDesktop{};
+    bool isActive{};
+    double scale{};
+    DWORD refreshRate{};
+    std::string deviceID;
+    std::string deviceName;
+    std::string deviceKey;
+    DWORD width;
+    DWORD height;
+};
+
+std::list<MonitorInfo> getMonitors() {
+    DISPLAY_DEVICE displayDevice;
+    displayDevice.cb = sizeof(DISPLAY_DEVICE);
+
+    std::list<MonitorInfo> allMonitors;
+
+    for (int i = 0; EnumDisplayDevices(nullptr, i, &displayDevice, 0 ); i++) {
+
+        DISPLAY_DEVICE lDevice2;
+        lDevice2.cb = sizeof(DISPLAY_DEVICE);
+        int i2 = 0;
+
+        MonitorInfo monitorInfo;
+
+        while (EnumDisplayDevices(displayDevice.DeviceName, i2, &lDevice2, NULL) != 0) {
+            monitorInfo.deviceID =  lDevice2.DeviceID;
+
+            printf(TEXT(">PART::2> \n DeviceName: %s\n  DeviceID: %s\n  DeviceKey: %s\n"),
+                   lDevice2.DeviceName,
+                   lDevice2.DeviceID,
+                   lDevice2.DeviceKey
+            );
+
+            i2++;
+        }
+
+        // if (displayDevice.StateFlags) {
+        DEVMODE devMode;
+        devMode.dmSize = sizeof(DEVMODE);
+
+
+        if (EnumDisplaySettings(displayDevice.DeviceName, ENUM_REGISTRY_SETTINGS, &devMode)) {
+            if (devMode.dmDisplayFrequency == 0)continue;
+
+            std::cout << "i: " << i << std::endl;
+
+            if (displayDevice.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) {
+                printf("attached to desktop\n");
+                monitorInfo.isAttachedToDesktop = true;
+            }
+
+            if (displayDevice.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE){
+                printf("device primary device\n");
+                monitorInfo.isPrimaryDevice = true;
+            }
+
+            if (displayDevice.StateFlags & DISPLAY_DEVICE_ACTIVE){
+                printf("display active\n");
+                monitorInfo.isActive = true;
+            }
+
+
+            std::string targetDisplayName = displayDevice.DeviceName;
+
+            monitorInfo.deviceName = displayDevice.DeviceName;
+            monitorInfo.deviceKey = displayDevice.DeviceKey;
+
+            monitorInfo.scale = getScaleOfScreen( targetDisplayName, devMode.dmPelsWidth, devMode.dmPelsHeight );
+            monitorInfo.refreshRate = devMode.dmDisplayFrequency;
+            monitorInfo.width = devMode.dmPelsWidth;
+            monitorInfo.height = devMode.dmPelsHeight;
+
+            std::cout << "DeviceName: " << displayDevice.DeviceName << std::endl;
+            std::cout << "DeviceString: " << displayDevice.DeviceString << std::endl;
+            std::cout << "DeviceKey: " << displayDevice.DeviceKey << std::endl;
+            std::cout << "DeviceID: " << displayDevice.DeviceID << std::endl;
+            std::cout << "  Width: " << devMode.dmPelsWidth << std::endl;
+            std::cout << "  Height: " << devMode.dmPelsHeight << std::endl;
+            std::cout << "  Scale: " <<  getScaleOfScreen( targetDisplayName, devMode.dmPelsWidth, devMode.dmPelsHeight ) << std::endl;
+            std::cout << "  Refresh Rate: " << devMode.dmDisplayFrequency << " Hz" << std::endl;
+
+
+            std::cout << std::endl;
+        }
+        // }
+
+        allMonitors.push_back(monitorInfo);
+
+        displayDevice.cb = sizeof(DISPLAY_DEVICE);
+    }
+
+    return allMonitors;
+}
+
+///////////////////////////// Frequency End //////////////////////////////////////
+
 const int DEVICE_NAME_SIZE = 64;   // 64 comes from DISPLAYCONFIG_TARGET_DEVICE_NAME.monitorFriendlyDeviceName
 const int DEVICE_PATH_SIZE = 128;  // 128 comes from DISPLAYCONFIG_TARGET_DEVICE_NAME.monitorDevicePath
 
@@ -31,7 +168,7 @@ struct Win32DeviceNameInfo {
 
 struct Win32QueryDisplayConfigResults {
     Win32QueryDisplayConfigResults(UINT32 cPathInfo, UINT32 cModeInfo)
-        : error(ERROR_SUCCESS) {
+            : error(ERROR_SUCCESS) {
         this->rgPathInfo = std::vector<DISPLAYCONFIG_PATH_INFO>(cPathInfo);
         this->rgModeInfo = std::vector<DISPLAYCONFIG_MODE_INFO>(cModeInfo);
         this->rgNameInfo = std::vector<struct Win32DeviceNameInfo>();
@@ -68,16 +205,16 @@ struct Win32RestoreDisplayConfigDevice {
 DWORD RunDisplayChangeContextLoop(LPVOID lpParam);
 
 class Win32DisplayChangeContext {
-   public:
+public:
     Win32DisplayChangeContext(Napi::Env env, Napi::Function &callback) : running(), dwThreadId(0) {
         this->running.store(TRUE);
         this->hThread = NULL;
         this->tsfn = Napi::ThreadSafeFunction::New(
-            env,
-            callback,
-            "Win32DisplayChangeContext thread",
-            512,
-            1);
+                env,
+                callback,
+                "Win32DisplayChangeContext thread",
+                512,
+                1);
     }
 
     DWORD Start() {
@@ -130,15 +267,15 @@ DWORD RunDisplayChangeContextLoop(LPVOID lpParam) {
     // In order to get WM_DISPLAYCHANGE messages we have to create
     // a hidden window in this specific thread.
     HWND hWnd = CreateWindowExW(
-        WS_EX_TRANSPARENT,
-        L"STATIC",
-        L"win32-displayconfig Broadcast Event Monitor",
-        WS_OVERLAPPEDWINDOW,
-        0, 0, 0, 0,
-        NULL,
-        NULL,
-        GetModuleHandle(NULL),
-        NULL);
+            WS_EX_TRANSPARENT,
+            L"STATIC",
+            L"win32-displayconfig Broadcast Event Monitor",
+            WS_OVERLAPPEDWINDOW,
+            0, 0, 0, 0,
+            NULL,
+            NULL,
+            GetModuleHandle(NULL),
+            NULL);
 
     // The documentation would lead you to believe you get a WM_DISPLAYCHANGE
     // whenever the display changes. The documentation would be wrong.
@@ -211,32 +348,7 @@ bool AlreadyHasNameInfo(const std::vector<struct Win32DeviceNameInfo> &rgNameInf
     return false;
 }
 
-double getScale () {
-    auto activeWindow = GetActiveWindow();
-    HMONITOR monitor = MonitorFromWindow(activeWindow, MONITOR_DEFAULTTONEAREST);
 
-    // Get the logical width and height of the monitor
-    MONITORINFOEX monitorInfoEx;
-    monitorInfoEx.cbSize = sizeof(monitorInfoEx);
-    GetMonitorInfo(monitor, &monitorInfoEx);
-    auto cxLogical = monitorInfoEx.rcMonitor.right - monitorInfoEx.rcMonitor.left;
-    auto cyLogical = monitorInfoEx.rcMonitor.bottom - monitorInfoEx.rcMonitor.top;
-
-    // Get the physical width and height of the monitor
-    DEVMODE devMode;
-    devMode.dmSize = sizeof(devMode);
-    devMode.dmDriverExtra = 0;
-    EnumDisplaySettings(monitorInfoEx.szDevice, ENUM_CURRENT_SETTINGS, &devMode);
-    auto cxPhysical = devMode.dmPelsWidth;
-    auto cyPhysical = devMode.dmPelsHeight;
-
-    // Calculate the scaling factor
-    auto horizontalScale = ((double) cxPhysical / (double) cxLogical);
-    auto verticalScale = ((double) cyPhysical / (double) cyLogical);
-
-    return horizontalScale;
-}
-//void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults) {
 void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults, DISPLAYCONFIG_TOPOLOGY_ID topologyId) {
     DISPLAYCONFIG_TARGET_DEVICE_NAME request;
     request.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
@@ -272,7 +384,7 @@ void AcquireDeviceNames(std::shared_ptr<struct Win32QueryDisplayConfigResults> c
         newEntry->edidManufactureId = request.edidManufactureId;
         newEntry->edidProductCodeId = request.edidProductCodeId;
         newEntry->connectorInstance = request.connectorInstance;
-                 newEntry->topologyId = topologyId;
+        newEntry->topologyId = topologyId;
         wcscpy_s(newEntry->monitorFriendlyDeviceName, DEVICE_NAME_SIZE, request.monitorFriendlyDeviceName);
         wcscpy_s(newEntry->monitorDevicePath, DEVICE_PATH_SIZE, request.monitorDevicePath);
     }
@@ -303,7 +415,7 @@ std::shared_ptr<struct Win32QueryDisplayConfigResults> DoQueryDisplayConfig() {
             result->faultWasBuffer = true;
             return result;
         }
-        
+
         DISPLAYCONFIG_TOPOLOGY_ID currentTopology;
 
         errorCode = QueryDisplayConfig(QDC_DATABASE_CURRENT, &cPathInfo, result->rgPathInfo.data(), &cModeInfo, result->rgModeInfo.data(), &currentTopology);
@@ -312,7 +424,7 @@ std::shared_ptr<struct Win32QueryDisplayConfigResults> DoQueryDisplayConfig() {
             result->rgPathInfo.resize(cPathInfo);
             result->rgModeInfo.resize(cModeInfo);
             AcquireDeviceNames(result, currentTopology);
-           //  AcquireDeviceNames(result);
+            //  AcquireDeviceNames(result);
             return result;
         } else if (errorCode != ERROR_INSUFFICIENT_BUFFER) {
             result->faultWasBuffer = false;
@@ -385,11 +497,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     // Windows, the only way out of this hole is to turn them all on, then turn off
     // the ones we don't want.
     auto error = SetDisplayConfig(
-        preserve.size(),
-        preserve.data(),
-        0,
-        NULL,
-        SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_TOPOLOGY_CLONE | SDC_TOPOLOGY_EXTEND | SDC_ALLOW_PATH_ORDER_CHANGES);
+            preserve.size(),
+            preserve.data(),
+            0,
+            NULL,
+            SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_TOPOLOGY_CLONE | SDC_TOPOLOGY_EXTEND | SDC_ALLOW_PATH_ORDER_CHANGES);
 
     if (error != ERROR_SUCCESS) {
         return error;
@@ -425,11 +537,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     }
 
     error = SetDisplayConfig(
-        preserve.size(),
-        preserve.data(),
-        0,
-        NULL,
-        SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES);
+            preserve.size(),
+            preserve.data(),
+            0,
+            NULL,
+            SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES);
 
     if (!args->persistent || error != ERROR_SUCCESS) {
         return error;
@@ -444,11 +556,11 @@ LONG ToggleEnabled(const std::shared_ptr<struct Win32DeviceConfigToggleEnabled> 
     }
 
     return SetDisplayConfig(
-        persistentQueryResults->rgPathInfo.size(),
-        persistentQueryResults->rgPathInfo.data(),
-        persistentQueryResults->rgModeInfo.size(),
-        persistentQueryResults->rgModeInfo.data(),
-        SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE);
+            persistentQueryResults->rgPathInfo.size(),
+            persistentQueryResults->rgPathInfo.data(),
+            persistentQueryResults->rgModeInfo.size(),
+            persistentQueryResults->rgModeInfo.data(),
+            SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE);
 }
 
 LONG RestoreDeviceConfig(const std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> restoreConfig, BOOL persistent) {
@@ -486,11 +598,11 @@ LONG RestoreDeviceConfig(const std::shared_ptr<std::vector<struct Win32RestoreDi
     auto persistFlag = persistent ? SDC_SAVE_TO_DATABASE : 0;
 
     return SetDisplayConfig(
-        rgPathInfo.size(),
-        rgPathInfo.data(),
-        rgModeInfo.size(),
-        rgModeInfo.data(),
-        SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | persistFlag);
+            rgPathInfo.size(),
+            rgPathInfo.data(),
+            rgModeInfo.size(),
+            rgModeInfo.data(),
+            SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | persistFlag);
 }
 
 Napi::Object ConvertLUID(Napi::Env env, const LUID *luid) {
@@ -765,8 +877,8 @@ Napi::Object ConvertNameInfo(Napi::Env env, const struct Win32DeviceNameInfo &na
     result.Set("edidManufactureId", (double)nameInfo.edidManufactureId);
     result.Set("edidProductCodeId", (double)nameInfo.edidProductCodeId);
     result.Set("connectorInstance", (double)nameInfo.connectorInstance);
- result.Set("topologyId", (double)nameInfo.topologyId);
- result.Set("scale", (double)getScale());
+    result.Set("topologyId", (double)nameInfo.topologyId);
+  //  result.Set("scale", (double)getScale());
 
     result.Set("monitorFriendlyDeviceName", Napi::String::New(env, (const char16_t *)nameInfo.monitorFriendlyDeviceName, wcsnlen_s(nameInfo.monitorFriendlyDeviceName, DEVICE_NAME_SIZE)));
     result.Set("monitorDevicePath", Napi::String::New(env, (const char16_t *)nameInfo.monitorDevicePath, wcsnlen_s(nameInfo.monitorDevicePath, DEVICE_PATH_SIZE)));
@@ -801,24 +913,55 @@ Napi::Array ConvertModesInfo(Napi::Env env, const std::vector<DISPLAYCONFIG_MODE
     return result;
 }
 
+
+
 Napi::Array ConvertNamesInfo(Napi::Env env, const std::vector<struct Win32DeviceNameInfo> &rgNameInfo) {
     auto result = Napi::Array::New(env, rgNameInfo.size());
+
     for (int i = 0; i < rgNameInfo.size(); i++) {
-        result.Set(i, ConvertNameInfo(env, rgNameInfo[i]));
+        auto item = ConvertNameInfo(env, rgNameInfo[i]);
+        result.Set(i, item);
     }
     return result;
 }
+
+Napi::Array GetMonitors(Napi::Env env) {
+    auto list = getMonitors();
+    auto result = Napi::Array::New(env, list.size());
+
+    for (int i = 0; i < list.size(); i++) {
+        auto item = Napi::Object::New(env);
+        auto it1 = std::next(list.begin(), i);
+
+        item.Set("refreshRate", it1->refreshRate);
+        item.Set("scale", it1->scale);
+        item.Set("deviceID", it1->deviceID);
+        item.Set("deviceKey", it1->deviceKey);
+        item.Set("isPrimaryDevice", it1->isPrimaryDevice);
+        item.Set("deviceName", it1->deviceName);
+        item.Set("isActive", it1->isActive);
+        item.Set("width", it1->width);
+        item.Set("height", it1->height);
+
+        result.Set(i, item);
+    }
+    
+    return result;
+}
+
 
 Napi::Object ConvertConfigResults(Napi::Env env, const std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults) {
     auto result = Napi::Object::New(env);
     result.Set("pathArray", ConvertPathsInfo(env, configResults->rgPathInfo));
     result.Set("modeArray", ConvertModesInfo(env, configResults->rgModeInfo));
     result.Set("nameArray", ConvertNamesInfo(env, configResults->rgNameInfo));
+    result.Set("metaArray", GetMonitors(env));
+
     return result;
 }
 
 class Win32QueryDisplayConfigWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32QueryDisplayConfigWorker(Napi::Function &callback) : Napi::AsyncWorker(callback), configResults() {}
 
     void Execute() {
@@ -836,7 +979,7 @@ class Win32QueryDisplayConfigWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<struct Win32QueryDisplayConfigResults> configResults;
 };
 
@@ -855,9 +998,9 @@ Napi::Value Win32QueryDisplayConfig(const Napi::CallbackInfo &info) {
 }
 
 class Win32ToggleEnabledWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32ToggleEnabledWorker(Napi::Function &callback, std::shared_ptr<struct Win32DeviceConfigToggleEnabled> args)
-        : Napi::AsyncWorker(callback), args(args) {}
+            : Napi::AsyncWorker(callback), args(args) {}
 
     void Execute() {
         this->errorCode = ToggleEnabled(this->args);
@@ -868,7 +1011,7 @@ class Win32ToggleEnabledWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<struct Win32DeviceConfigToggleEnabled> args;
     LONG errorCode;
 };
@@ -944,9 +1087,9 @@ Napi::Value Win32ToggleEnabledDisplays(const Napi::CallbackInfo &info) {
 }
 
 class Win32RestoreDisplayConfigWorker : public Napi::AsyncWorker {
-   public:
+public:
     Win32RestoreDisplayConfigWorker(Napi::Function &callback, std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> configs, BOOL persistent)
-        : Napi::AsyncWorker(callback), configs(configs), persistent(persistent) {}
+            : Napi::AsyncWorker(callback), configs(configs), persistent(persistent) {}
 
     void Execute() {
         this->errorCode = RestoreDeviceConfig(this->configs, this->persistent);
@@ -957,7 +1100,7 @@ class Win32RestoreDisplayConfigWorker : public Napi::AsyncWorker {
         return result;
     }
 
-   private:
+private:
     std::shared_ptr<std::vector<struct Win32RestoreDisplayConfigDevice>> configs;
     LONG errorCode;
     BOOL persistent;
