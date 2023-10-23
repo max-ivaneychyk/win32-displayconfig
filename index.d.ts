@@ -7,6 +7,17 @@ export class Win32Error extends Error {
   code: number;
 }
 
+interface MetaInfo {
+  scale: number;
+  width: number;
+  height: number;
+  refreshRate: number;
+  deviceID: string;
+  isPrimaryDevice: boolean;
+  deviceName: string;
+  isActive: string
+}
+
 interface AdapterId {
   LowPart: number;
   HighPart: number;
@@ -120,6 +131,7 @@ export interface QueryDisplayConfigResults {
   pathArray: PathInfo[];
   modeInfoArray: ModeInfo[];
   nameArray: NameInfo[];
+  metaArray: MetaInfo[];
 }
 
 export function queryDisplayConfig(): Promise<QueryDisplayConfigResults>;
