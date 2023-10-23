@@ -242,6 +242,15 @@ module.exports.queryDisplayConfig = () => {
  */
 module.exports.extractDisplayConfig = async () => {
   const config = await module.exports.queryDisplayConfig();
+
+  const parseOrderNum = (str) => {
+    return parseInt(str.split("\\").at(-1), 10)
+  }
+
+  config.metaArray.sort((a, b) => {
+    return parseOrderNum(a.deviceID) - parseOrderNum(b.deviceID)
+  });
+
   const ret = [];
   for (const { value, buffer: pathBuffer } of config.pathArray) {
     let inUse = value.flags & (1 === 1) ? true : false;
@@ -300,7 +309,8 @@ module.exports.extractDisplayConfig = async () => {
       continue;
     }
 
-    const { monitorFriendlyDeviceName, monitorDevicePath, topologyId, scale } = displayNameEntry;
+    const { monitorFriendlyDeviceName, monitorDevicePath, topologyId } = displayNameEntry;
+
     const output = {
       displayName: monitorFriendlyDeviceName,
       devicePath: monitorDevicePath,
@@ -308,7 +318,6 @@ module.exports.extractDisplayConfig = async () => {
       targetConfigId,
       inUse,
       topologyId,
-      scale,
       outputTechnology,
       rotation,
       scaling,
@@ -328,7 +337,65 @@ module.exports.extractDisplayConfig = async () => {
 
     ret.push(output);
   }
-  return ret;
+
+  // ret.sort((a, b) => {
+  //   return parseOrderNum(a.deviceID) - parseOrderNum(b.deviceID)
+  // });
+
+  console.log(ret);
+  const parseOrder = (devicePath) => {
+    return Number(devicePath.match(/UID\d{1,10}/).replace("UID", ""))
+  }
+
+  ret.sort((a, b) => {
+    return parseOrder(a.devicePath) - parseOrder(b.devicePath)
+  });
+
+  const DISPLAYCONFIG_TOPOLOGY_CLONE = 2;
+  const DISPLAYCONFIG_TOPOLOGY_EXTEND = 4;
+
+  const mapOfSourceConfig = {};
+
+  ret.forEach((display) => {
+    const key = display.sourceConfigId;
+    const count = mapOfSourceConfig[key] || 0;
+    mapOfSourceConfig[key] = count+1;
+  });
+
+  return ret.map((display, order) => {
+
+    if (display.topologyId !== DISPLAYCONFIG_TOPOLOGY_CLONE) {
+      return {
+        order: order+1,
+        ...display,
+        ...(config.metaArray[order] || {})
+      }
+    }
+
+    // Find parent mirrored display
+    if (display.targetConfigId.id !== parseOrder(display.devicePath)) {
+      const indexOfParentDisplay = ret.findIndex(item => {
+        return item.sourceConfigId.id === display.sourceConfigId.id &&
+            item.targetConfigId.id !== display.targetConfigId.id
+      });
+
+      const parentItem = config.metaArray[indexOfParentDisplay] || {};
+      // overwrite scale & width & height
+      config.metaArray[order] = {
+        ...config.metaArray[order],
+        scale: parentItem.scale,
+        width: parentItem.width,
+        height: parentItem.height,
+      }
+    }
+    // fix topology id info
+    return {
+      order: order+1,
+      ...display,
+      topologyId: mapOfSourceConfig[display.sourceConfigId] > 1 ? DISPLAYCONFIG_TOPOLOGY_CLONE : DISPLAYCONFIG_TOPOLOGY_EXTEND,
+      ...(config.metaArray[order] || {})
+    }
+  });
 };
 
 async function win32_toggleEnabledDisplays(args) {
