@@ -29,6 +29,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
     if (GetMonitorInfo(hMonitor, &monitorInfo)) {
         if (monitorInfo.szDevice == monitorData->targetDisplayName) {
+               std::cout << "FOUND: " << std::endl;
             monitorData->monitorInfo = monitorInfo;
         }
     }
@@ -37,11 +38,18 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 double getScaleOfScreen( std::string targetDisplayName, int w, int h) {
     MonitorData monitorData;
     monitorData.targetDisplayName = targetDisplayName;
+    
+    std::cout << "targetDisplayName: " << targetDisplayName << std::endl;
 
     EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(&monitorData));
 
     double wLocal =  monitorData.monitorInfo.rcMonitor.right -  monitorData.monitorInfo.rcMonitor.left;
     //   auto hLocal =  monitorData.monitorInfo.rcMonitor.top -  monitorData.monitorInfo.rcMonitor.bottom;
+    std::cout << "w: " << w << std::endl;
+     std::cout << "h: " << h << std::endl;
+    std::cout << "wLocal: " << wLocal << std::endl;
+     std::cout << "hl: " <<  (monitorData.monitorInfo.rcMonitor.top -  monitorData.monitorInfo.rcMonitor.bottom) << std::endl;
+
 
     return (w / wLocal) * 100;
 }
