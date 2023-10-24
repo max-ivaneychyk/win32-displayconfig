@@ -14,7 +14,38 @@
 #include <iostream>
 #include <list>
 
+#include <Shobjidl.h>
 
+int test() {
+    HMODULE hModule = LoadLibraryA("Shcore.dll");
+    if (hModule == NULL) {
+        std::cerr << "Failed to load Shcore.dll" << std::endl;
+        return 1;
+    }
+
+    typedef HRESULT(WINAPI* GetScaleFactorForMonitorPtr)(HMONITOR, DEVICE_SCALE_FACTOR*);
+    GetScaleFactorForMonitorPtr getScaleFactorForMonitorFunc = reinterpret_cast<GetScaleFactorForMonitorPtr>(
+            GetProcAddress(hModule, "GetScaleFactorForMonitor"));
+
+    if (getScaleFactorForMonitorFunc == NULL) {
+        std::cerr << "Failed to load GetScaleFactorForMonitor function" << std::endl;
+        FreeLibrary(hModule);
+        return 1;
+    }
+
+    HMONITOR primaryMonitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY);
+    DEVICE_SCALE_FACTOR scaleFactor;
+    HRESULT result = getScaleFactorForMonitorFunc(primaryMonitor, &scaleFactor);
+
+    if (result == S_OK) {
+        std::cout << "Scale Factor: " << scaleFactor << std::endl;
+    } else {
+        std::cerr << "GetScaleFactorForMonitor failed with HRESULT: 0x" << std::hex << result << std::endl;
+    }
+
+    FreeLibrary(hModule);
+    return 0;
+}
 /////////////////////////// SCALE ////////////////////////////////////////
 
 
@@ -38,7 +69,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 double getScaleOfScreen( std::string targetDisplayName, int w, int h) {
     MonitorData monitorData;
     monitorData.targetDisplayName = targetDisplayName;
-    
+    test();
     std::cout << "targetDisplayName: " << targetDisplayName << std::endl;
 
     EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(&monitorData));
