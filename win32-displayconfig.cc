@@ -16,7 +16,9 @@
 
 #include <Shobjidl.h>
 
-int test() {
+/////////////////////////// SCALE ////////////////////////////////////////
+
+int GetScale(DEVICE_SCALE_FACTOR *scale, HMONITOR primaryMonitor) {
     HMODULE hModule = LoadLibraryA("Shcore.dll");
     if (hModule == NULL) {
         std::cerr << "Failed to load Shcore.dll" << std::endl;
@@ -24,7 +26,7 @@ int test() {
     }
 
     typedef HRESULT(WINAPI* GetScaleFactorForMonitorPtr)(HMONITOR, DEVICE_SCALE_FACTOR*);
-    GetScaleFactorForMonitorPtr getScaleFactorForMonitorFunc = reinterpret_cast<GetScaleFactorForMonitorPtr>(
+    auto getScaleFactorForMonitorFunc = reinterpret_cast<GetScaleFactorForMonitorPtr>(
             GetProcAddress(hModule, "GetScaleFactorForMonitor"));
 
     if (getScaleFactorForMonitorFunc == NULL) {
@@ -33,35 +35,32 @@ int test() {
         return 1;
     }
 
-    HMONITOR primaryMonitor = MonitorFromWindow(GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY);
-    DEVICE_SCALE_FACTOR scaleFactor;
-    HRESULT result = getScaleFactorForMonitorFunc(primaryMonitor, &scaleFactor);
+    HRESULT result = getScaleFactorForMonitorFunc(primaryMonitor, scale);
 
-    if (result == S_OK) {
-        std::cout << "Scale Factor: " << scaleFactor << std::endl;
-    } else {
+    if (result != S_OK) {
         std::cerr << "GetScaleFactorForMonitor failed with HRESULT: 0x" << std::hex << result << std::endl;
     }
 
     FreeLibrary(hModule);
     return 0;
 }
-/////////////////////////// SCALE ////////////////////////////////////////
-
 
 struct MonitorData {
     std::string targetDisplayName;
-    MONITORINFOEX monitorInfo;
+    DEVICE_SCALE_FACTOR scale;
 };
 
 BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
     MonitorData* monitorData = reinterpret_cast<MonitorData*>(dwData);
     MONITORINFOEX monitorInfo;
+    DEVICE_SCALE_FACTOR scale;
+
     monitorInfo.cbSize = sizeof(MONITORINFOEX);
+
     if (GetMonitorInfo(hMonitor, &monitorInfo)) {
         if (monitorInfo.szDevice == monitorData->targetDisplayName) {
-               std::cout << "FOUND: " << std::endl;
-            monitorData->monitorInfo = monitorInfo;
+            GetScale(&scale, hMonitor);
+            monitorData->scale = scale;
         }
     }
     return TRUE;
@@ -69,20 +68,14 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 double getScaleOfScreen( std::string targetDisplayName, int w, int h) {
     MonitorData monitorData;
     monitorData.targetDisplayName = targetDisplayName;
-    test();
+
     std::cout << "targetDisplayName: " << targetDisplayName << std::endl;
 
     EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(&monitorData));
 
-    double wLocal =  monitorData.monitorInfo.rcMonitor.right -  monitorData.monitorInfo.rcMonitor.left;
-    //   auto hLocal =  monitorData.monitorInfo.rcMonitor.top -  monitorData.monitorInfo.rcMonitor.bottom;
-    std::cout << "w: " << w << std::endl;
-     std::cout << "h: " << h << std::endl;
-    std::cout << "wLocal: " << wLocal << std::endl;
-     std::cout << "hl: " <<  (monitorData.monitorInfo.rcMonitor.top -  monitorData.monitorInfo.rcMonitor.bottom) << std::endl;
+    std::cout << "scl: " << monitorData.scale << std::endl;
 
-
-    return (w / wLocal) * 100;
+    return monitorData.scale;
 }
 ///////////////////////////// END SCALE //////////////////////////////////////
 
@@ -463,7 +456,6 @@ std::shared_ptr<struct Win32QueryDisplayConfigResults> DoQueryDisplayConfig() {
             result->rgPathInfo.resize(cPathInfo);
             result->rgModeInfo.resize(cModeInfo);
             AcquireDeviceNames(result, currentTopology);
-            //  AcquireDeviceNames(result);
             return result;
         } else if (errorCode != ERROR_INSUFFICIENT_BUFFER) {
             result->faultWasBuffer = false;
@@ -917,7 +909,7 @@ Napi::Object ConvertNameInfo(Napi::Env env, const struct Win32DeviceNameInfo &na
     result.Set("edidProductCodeId", (double)nameInfo.edidProductCodeId);
     result.Set("connectorInstance", (double)nameInfo.connectorInstance);
     result.Set("topologyId", (double)nameInfo.topologyId);
-  //  result.Set("scale", (double)getScale());
+    //  result.Set("scale", (double)getScale());
 
     result.Set("monitorFriendlyDeviceName", Napi::String::New(env, (const char16_t *)nameInfo.monitorFriendlyDeviceName, wcsnlen_s(nameInfo.monitorFriendlyDeviceName, DEVICE_NAME_SIZE)));
     result.Set("monitorDevicePath", Napi::String::New(env, (const char16_t *)nameInfo.monitorDevicePath, wcsnlen_s(nameInfo.monitorDevicePath, DEVICE_PATH_SIZE)));
@@ -984,7 +976,7 @@ Napi::Array GetMonitors(Napi::Env env) {
 
         result.Set(i, item);
     }
-    
+
     return result;
 }
 
