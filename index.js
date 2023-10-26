@@ -372,7 +372,7 @@ module.exports.extractDisplayConfig = async () => {
     console.log(display.topologyId, DISPLAYCONFIG_TOPOLOGY_CLONE)
     if (display.topologyId !== DISPLAYCONFIG_TOPOLOGY_CLONE) {
       return {
-        order: order+1,
+        order: ( config.metaArray[order]?.deviceKey ? parseOrderNum(config.metaArray[order].deviceKey) : order )+1,
         ...display,
         ...(config.metaArray[order] || {})
       }
@@ -396,7 +396,7 @@ module.exports.extractDisplayConfig = async () => {
     }
     // fix topology id info
     return {
-      order: order+1,
+      order: ( config.metaArray[order]?.deviceKey ? parseOrderNum(config.metaArray[order].deviceKey) : order )+1,
       ...display,
       topologyId: mapOfSourceConfig[display.sourceConfigId.id] > 1 ? DISPLAYCONFIG_TOPOLOGY_CLONE : DISPLAYCONFIG_TOPOLOGY_EXTEND,
       ...(config.metaArray[order] || {})
