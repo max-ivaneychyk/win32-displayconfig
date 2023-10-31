@@ -150,7 +150,8 @@ export interface ExtractedDisplayConfig {
   outputTechnology: string;
   rotation: number;
   scaling: string;
-    scale: number;
+  scale: number;
+  order: number;
   topologyId: number;
   sourceMode: SourceMode;
   targetVideoSignalInfo?: TargetVideoSignalInfo;
@@ -159,7 +160,7 @@ export interface ExtractedDisplayConfig {
   targetModeBuffer?: Buffer;
 }
 
-export function extractDisplayConfig(): Promise<ExtractedDisplayConfig[]>;
+export function extractDisplayConfig(): Promise<{displays: ExtractedDisplayConfig[], __meta: object}>;
 
 export interface ToggleEnabledDisplayArgs {
   enablePaths: string[];
