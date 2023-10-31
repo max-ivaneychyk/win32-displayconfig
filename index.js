@@ -237,20 +237,23 @@ module.exports.queryDisplayConfig = () => {
  * Unlike {@link queryDisplayConfig}, this function pulls all relevant information
  * about a device/mode pairing into a single object.
  *
- * @returns {Promise<ExtractedDisplayConfig>} A Promise, resolving to display configuration information
+ * @returns {Promise<{displays: ExtractedDisplayConfig[]>} A Promise, resolving to display configuration information
  *   or rejecting with a {@link Win32Error} if something goes wrong.
  */
 module.exports.extractDisplayConfig = async () => {
   const config = await module.exports.queryDisplayConfig();
 
-  const parseOrderNum = (str) => {
-    console.log("parse int ", parseInt(str.split("\\").at(-1), 10))
-    return parseInt(str.split("\\").at(-1), 10)
+  const parseDeviceIdOrder = (str) => {
+    return parseInt(str.toString().split("\\").at(-1), 10)
   }
-
+  // Sort by deviceID suffix
   config.metaArray.sort((a, b) => {
-    return parseOrderNum(a.deviceID) - parseOrderNum(b.deviceID)
+    return parseDeviceIdOrder(a.deviceID) - parseDeviceIdOrder(b.deviceID)
   });
+  // Set Order field to Display
+  config.metaArray.forEach((meta, i) => {
+    meta.order = i+1;
+  })
 
   const ret = [];
   for (const { value, buffer: pathBuffer } of config.pathArray) {
@@ -339,69 +342,85 @@ module.exports.extractDisplayConfig = async () => {
     ret.push(output);
   }
 
-  // ret.sort((a, b) => {
-  //   return parseOrderNum(a.deviceID) - parseOrderNum(b.deviceID)
-  // });
-
-  //console.log(ret);
-  const parseOrder = (devicePath) => {
-    console.log("devicePath",  Number(devicePath.match(/UID\d{1,10}/)[0].replace("UID", "")));
+  const parseOrderFromDevicePath = (devicePath) => {
     return Number(devicePath.match(/UID\d{1,10}/)[0].replace("UID", ""))
   }
 
-  ret.sort((a, b) => {
-    return parseOrder(a.devicePath) - parseOrder(b.devicePath)
-  });
-
   const DISPLAYCONFIG_TOPOLOGY_CLONE = 2;
   const DISPLAYCONFIG_TOPOLOGY_EXTEND = 4;
-
   const mapOfSourceConfig = {};
 
+  // Sort by devicePath all displays
+  ret.sort((a, b) => {
+    return parseOrderFromDevicePath(a.devicePath) - parseOrderFromDevicePath(b.devicePath)
+  });
+  // Calc count of display sources
   ret.forEach((display) => {
-    console.log("CONF", display.sourceConfigId);
     const key = display.sourceConfigId.id;
     const count = mapOfSourceConfig[key] || 0;
     mapOfSourceConfig[key] = count+1;
   });
 
-  console.log(mapOfSourceConfig);
+  const isModeCloned = topology => {
+    return topology === DISPLAYCONFIG_TOPOLOGY_CLONE
+  }
 
-  return ret.map((display, order) => {
+  const iEqualSourceAndTargetIds = display => {
+    return display.targetConfigId.id === parseOrderFromDevicePath(display.devicePath)
+  }
 
-    console.log(display.topologyId, DISPLAYCONFIG_TOPOLOGY_CLONE)
-    if (display.topologyId !== DISPLAYCONFIG_TOPOLOGY_CLONE) {
+  const displays = ret.map((display, i) => {
+    // Not cloned
+    if (!isModeCloned(display.topologyId)) {
       return {
-        order: ( config.metaArray[order]?.deviceKey ? parseOrderNum(config.metaArray[order].deviceKey) : order )+1,
         ...display,
-        ...(config.metaArray[order] || {})
+        ...(config.metaArray[i] || {})
       }
     }
 
-    // Find parent mirrored display
-    if (display.targetConfigId.id !== parseOrder(display.devicePath)) {
-      const indexOfParentDisplay = ret.findIndex(item => {
+    // If cloned mode
+    // Find parent mirrored display - for second duplicated display
+    if (!iEqualSourceAndTargetIds(display)) {
+      const indexOfMirrorDisplay = ret.findIndex(item => {
         return item.sourceConfigId.id === display.sourceConfigId.id &&
             item.targetConfigId.id !== display.targetConfigId.id
       });
 
-      const parentItem = config.metaArray[indexOfParentDisplay] || {};
-      // overwrite scale & width & height
-      config.metaArray[order] = {
-        ...config.metaArray[order],
-        scale: parentItem.scale,
-        width: parentItem.width,
-        height: parentItem.height,
+      // Source of mirroring - display
+      const initialMirroringDisplay = config.metaArray[indexOfMirrorDisplay];
+
+      if (initialMirroringDisplay) {
+        // overwrite scale & width & height
+        config.metaArray[i] = {
+          ...config.metaArray[i],
+          scale: initialMirroringDisplay.scale,
+          width: initialMirroringDisplay.width,
+          height: initialMirroringDisplay.height,
+        }
+       }
+      // Add position to second mirroring display - if position is missed
+      if (initialMirroringDisplay && !display.sourceMode?.position) {
+        display.sourceMode = ret[indexOfMirrorDisplay]?.sourceMode
       }
     }
+
+    // only cloned mode have several equal sourceConfigId
+    const topologyId = mapOfSourceConfig[display.sourceConfigId.id] > 1 ?
+      DISPLAYCONFIG_TOPOLOGY_CLONE :
+      DISPLAYCONFIG_TOPOLOGY_EXTEND;
+
     // fix topology id info
     return {
-      order: ( config.metaArray[order]?.deviceKey ? parseOrderNum(config.metaArray[order].deviceKey) : order )+1,
       ...display,
-      topologyId: mapOfSourceConfig[display.sourceConfigId.id] > 1 ? DISPLAYCONFIG_TOPOLOGY_CLONE : DISPLAYCONFIG_TOPOLOGY_EXTEND,
-      ...(config.metaArray[order] || {})
+      topologyId,
+      ...(config.metaArray[i] || {})
     }
   });
+
+  return {
+    displays,
+    __meta: config
+  }
 };
 
 async function win32_toggleEnabledDisplays(args) {
