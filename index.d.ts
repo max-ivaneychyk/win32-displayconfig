@@ -151,6 +151,9 @@ export interface ExtractedDisplayConfig {
   rotation: number;
   scaling: string;
   scale: number;
+  refreshRate: number;
+  width: number;
+  height: number;
   order: number;
   topologyId: number;
   sourceMode: SourceMode;
