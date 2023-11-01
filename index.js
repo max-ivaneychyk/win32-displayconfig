@@ -361,17 +361,13 @@ module.exports.extractDisplayConfig = async () => {
     mapOfSourceConfig[key] = count+1;
   });
 
-  const isModeCloned = topology => {
-    return topology === DISPLAYCONFIG_TOPOLOGY_CLONE
-  }
-
   const iEqualSourceAndTargetIds = display => {
     return display.targetConfigId.id === parseOrderFromDevicePath(display.devicePath)
   }
 
   const displays = ret.map((display, i) => {
-    // Not cloned
-    if (!isModeCloned(display.topologyId)) {
+    // Only one screen
+    if (ret.length === 1) {
       return {
         ...display,
         ...(config.metaArray[i] || {})
